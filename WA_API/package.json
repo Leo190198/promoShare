@@ -1,0 +1,28 @@
+{
+  "name": "promoshare-whatsapp-api",
+  "version": "1.0.0",
+  "description": "WhatsApp API using whatsapp-web.js for groups, participants and text messages",
+  "main": "src/index.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "test": "node --test \"tests/**/*.test.js\""
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "pino": "^9.7.0",
+    "pino-http": "^10.4.0",
+    "qrcode": "^1.5.4",
+    "whatsapp-web.js": "^1.27.0",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "supertest": "^7.1.0"
+  }
+}
+

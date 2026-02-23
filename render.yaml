@@ -36,3 +36,38 @@ services:
         sync: false
       - key: SHOPEE_APP_SECRET
         sync: false
+  - type: web
+    name: promoshare-whatsapp-api
+    runtime: docker
+    rootDir: WA_API
+    dockerfilePath: ./Dockerfile
+    plan: free
+    autoDeploy: true
+    healthCheckPath: /api/v1/health
+    envVars:
+      - key: PORT
+        value: "10000"
+      - key: HOST
+        value: "0.0.0.0"
+      - key: NODE_ENV
+        value: "production"
+      - key: LOG_LEVEL
+        value: "info"
+      - key: WA_START_ON_BOOT
+        value: "true"
+      - key: WA_SESSION_CLIENT_ID
+        value: "main"
+      - key: WA_AUTH_DATA_PATH
+        value: "/var/data/wa_auth"
+      - key: WA_RECONNECT_ENABLED
+        value: "true"
+      - key: WA_RECONNECT_INITIAL_DELAY_MS
+        value: "5000"
+      - key: WA_RECONNECT_MAX_DELAY_MS
+        value: "60000"
+      - key: WA_PUPPETEER_HEADLESS
+        value: "true"
+      - key: PUPPETEER_EXECUTABLE_PATH
+        value: "/usr/bin/chromium"
+      - key: WA_API_KEY
+        sync: false

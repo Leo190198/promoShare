@@ -11,8 +11,14 @@ venv/
 .env
 *.env
 API/.env
+WA_API/.env
 
 # OS / editors
 .DS_Store
 Thumbs.db
 
+# Node / WhatsApp session artifacts
+node_modules/
+WA_API/node_modules/
+WA_API/.wwebjs_auth/
+WA_API/.wwebjs_cache/
