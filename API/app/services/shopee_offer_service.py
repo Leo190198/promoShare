@@ -1,8 +1,12 @@
 from __future__ import annotations
 
 import re
+from urllib.parse import urlparse
 from typing import Any
 
+import httpx
+
+from app.core.config import get_settings
 from app.constants.graphql_queries import SELECTION_SET_VERSION
 from app.core.cache import get_cache_manager
 from app.core.exceptions import ApiException, UpstreamShopeeException
@@ -14,8 +18,10 @@ from app.schemas.shopee_offers import (
     ShopOfferSearchData,
     ShopOffersSearchRequest,
 )
+from app.schemas.shopee_short_links import ShortLinkCreateRequest
 from app.services.shopee_client import ShopeeClient
 from app.services.shopee_graphql_builder import build_product_offer_v2_query, build_shop_offer_v2_query
+from app.services.shopee_short_link_service import generate_short_link
 
 
 def _validate_connection_payload(payload: Any, *, operation: str) -> dict[str, Any]:
@@ -46,6 +52,7 @@ def _validate_connection_payload(payload: Any, *, operation: str) -> dict[str, A
 _SHOPEE_ITEM_PATTERNS = (
     re.compile(r"/(?:[^/?#]+-)?i\.(?P<shop_id>\d+)\.(?P<item_id>\d+)(?:[/?#]|$)", re.IGNORECASE),
     re.compile(r"/product/(?P<shop_id>\d+)/(?P<item_id>\d+)(?:[/?#]|$)", re.IGNORECASE),
+    re.compile(r"/opaanlp/(?P<shop_id>\d+)/(?P<item_id>\d+)(?:[/?#]|$)", re.IGNORECASE),
 )
 
 
@@ -60,6 +67,30 @@ def parse_shopee_product_url_ids(url: str) -> tuple[int, int]:
         message="Could not extract shopId and itemId from Shopee product URL",
         details={"url": url},
     )
+
+
+def _should_try_shopee_short_link_resolution(url: str) -> bool:
+    host = (urlparse(url).hostname or "").lower()
+    return host.startswith("s.shopee.") or host.startswith("l.shopee.")
+
+
+async def resolve_shopee_product_url(url: str) -> str:
+    if not _should_try_shopee_short_link_resolution(url):
+        return url
+
+    settings = get_settings()
+    try:
+        async with httpx.AsyncClient(timeout=settings.shopee_timeout_seconds, follow_redirects=True) as client:
+            response = await client.get(url)
+    except httpx.HTTPError as exc:
+        raise ApiException(
+            status_code=502,
+            code="shopee_link_resolution_error",
+            message="Failed to resolve Shopee short/share URL",
+            details={"url": url, "reason": str(exc)},
+        ) from exc
+
+    return str(response.url)
 
 
 async def search_product_offers(payload: ProductOffersSearchRequest) -> tuple[ProductOfferSearchData, bool]:
@@ -99,7 +130,16 @@ async def search_shop_offers(payload: ShopOffersSearchRequest) -> tuple[ShopOffe
 
 
 async def get_product_post_data_from_url(payload: ProductFromUrlRequest) -> tuple[ProductFromUrlData, bool]:
-    shop_id, item_id = parse_shopee_product_url_ids(str(payload.url))
+    raw_url = str(payload.url)
+    resolved_url = await resolve_shopee_product_url(raw_url)
+
+    try:
+        shop_id, item_id = parse_shopee_product_url_ids(raw_url)
+    except ApiException as exc:
+        if exc.code != "invalid_product_url":
+            raise
+        shop_id, item_id = parse_shopee_product_url_ids(resolved_url)
+
     search_payload = ProductOffersSearchRequest(itemId=item_id, page=1, limit=1)
     data, cached = await search_product_offers(search_payload)
 
@@ -122,6 +162,8 @@ async def get_product_post_data_from_url(payload: ProductFromUrlRequest) -> tupl
 
     # If shopId is present in response, keep it authoritative; otherwise fall back to parsed URL.
     resolved_shop_id = node.shopId if node.shopId is not None else shop_id
+    canonical_product_url = node.productLink or f"https://shopee.com.br/product/{resolved_shop_id}/{item_id}"
+    short_link = await generate_short_link(ShortLinkCreateRequest(originUrl=canonical_product_url))
     return (
         ProductFromUrlData(
             shopId=resolved_shop_id,
@@ -130,8 +172,9 @@ async def get_product_post_data_from_url(payload: ProductFromUrlRequest) -> tupl
             imageUrl=node.imageUrl,
             priceMin=node.priceMin,
             priceMax=node.priceMax,
+            shortLink=short_link.shortLink,
             offerLink=node.offerLink,
-            productLink=node.productLink,
+            productLink=canonical_product_url,
             shopName=node.shopName,
             commissionRate=node.commissionRate,
         ),

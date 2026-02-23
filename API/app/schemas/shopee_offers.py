@@ -50,6 +50,7 @@ class ProductFromUrlData(BaseModel):
     imageUrl: str | None = None
     priceMin: str | None = None
     priceMax: str | None = None
+    shortLink: str | None = None
     offerLink: str | None = None
     productLink: str | None = None
     shopName: str | None = None

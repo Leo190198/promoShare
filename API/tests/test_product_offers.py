@@ -21,6 +21,12 @@ def test_parse_shopee_product_url_ids_supports_product_pattern() -> None:
     assert item_id == 58250067538
 
 
+def test_parse_shopee_product_url_ids_supports_opaanlp_pattern() -> None:
+    shop_id, item_id = parse_shopee_product_url_ids("https://shopee.com.br/opaanlp/578878861/23297695767?__mobile__=1")
+    assert shop_id == 578878861
+    assert item_id == 23297695767
+
+
 def test_product_offer_validation_requires_list_type_for_match_id(
     client: TestClient,
     auth_headers: dict[str, str],
@@ -102,8 +108,14 @@ def test_product_offer_success_and_cache_hit(client: TestClient, auth_headers: d
 
 @respx.mock
 def test_product_from_url_returns_post_ready_fields(client: TestClient, auth_headers: dict[str, str]) -> None:
-    respx.post("https://open-api.affiliate.shopee.com.br/graphql").mock(
-        return_value=httpx.Response(
+    captured_queries: list[str] = []
+
+    def graphql_handler(request: httpx.Request) -> httpx.Response:
+        body = request.content.decode("utf-8")
+        captured_queries.append(body)
+        if "generateShortLink" in body:
+            return httpx.Response(200, json={"data": {"generateShortLink": {"shortLink": "https://s.shopee.com.br/meu-short"}}})
+        return httpx.Response(
             200,
             json={
                 "data": {
@@ -127,7 +139,8 @@ def test_product_from_url_returns_post_ready_fields(client: TestClient, auth_hea
                 }
             },
         )
-    )
+
+    route = respx.post("https://open-api.affiliate.shopee.com.br/graphql").mock(side_effect=graphql_handler)
 
     response = client.post(
         "/api/v1/shopee/products/from-url",
@@ -142,7 +155,65 @@ def test_product_from_url_returns_post_ready_fields(client: TestClient, auth_hea
     assert payload["data"]["productName"] == "Apple Mac Mini M4"
     assert payload["data"]["imageUrl"] == "https://cf.shopee.com.br/file/demo"
     assert payload["data"]["offerLink"] == "https://s.shopee.com.br/demo"
+    assert payload["data"]["shortLink"] == "https://s.shopee.com.br/meu-short"
     assert payload["meta"]["operation"] == "productFromUrl"
+    assert len(route.calls) == 2
+    assert any("productOfferV2" in q for q in captured_queries)
+    assert any("generateShortLink" in q for q in captured_queries)
+
+
+@respx.mock
+def test_product_from_short_share_url_resolves_redirect_and_generates_short_link(
+    client: TestClient,
+    auth_headers: dict[str, str],
+) -> None:
+    short_url = "https://s.shopee.com.br/1Vty9Ij1Sa?share_channel_code=1"
+    final_url = "https://shopee.com.br/opaanlp/578878861/23297695767?__mobile__=1"
+
+    respx.get(short_url).mock(
+        return_value=httpx.Response(301, headers={"Location": final_url})
+    )
+    respx.get(final_url).mock(return_value=httpx.Response(200, text="ok"))
+
+    def graphql_handler(request: httpx.Request) -> httpx.Response:
+        body = request.content.decode("utf-8")
+        if "generateShortLink" in body:
+            return httpx.Response(200, json={"data": {"generateShortLink": {"shortLink": "https://s.shopee.com.br/final-short"}}})
+        return httpx.Response(
+            200,
+            json={
+                "data": {
+                    "productOfferV2": {
+                        "nodes": [
+                            {
+                                "itemId": 23297695767,
+                                "shopId": 578878861,
+                                "productName": "Produto via app share",
+                                "imageUrl": "https://cf.shopee.com.br/file/app-share",
+                                "priceMin": "99",
+                                "priceMax": "199",
+                                "offerLink": "https://s.shopee.com.br/offer-from-search",
+                                "productLink": "https://shopee.com.br/product/578878861/23297695767",
+                                "shopName": "Loja Demo",
+                                "commissionRate": "0.05",
+                            }
+                        ],
+                        "pageInfo": {"limit": 1, "hasNextPage": False, "scrollId": None},
+                    }
+                }
+            },
+        )
+
+    respx.post("https://open-api.affiliate.shopee.com.br/graphql").mock(side_effect=graphql_handler)
+
+    response = client.post("/api/v1/shopee/products/from-url", headers=auth_headers, json={"url": short_url})
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["data"]["shopId"] == 578878861
+    assert payload["data"]["itemId"] == 23297695767
+    assert payload["data"]["shortLink"] == "https://s.shopee.com.br/final-short"
+    assert payload["data"]["productLink"] == "https://shopee.com.br/product/578878861/23297695767"
 
 
 @respx.mock
