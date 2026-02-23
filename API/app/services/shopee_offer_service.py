@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from app.constants.graphql_queries import SELECTION_SET_VERSION
 from app.core.cache import get_cache_manager
-from app.core.exceptions import UpstreamShopeeException
+from app.core.exceptions import ApiException, UpstreamShopeeException
 from app.schemas.shopee_offers import (
+    ProductFromUrlData,
+    ProductFromUrlRequest,
     ProductOfferSearchData,
     ProductOffersSearchRequest,
     ShopOfferSearchData,
@@ -38,6 +41,25 @@ def _validate_connection_payload(payload: Any, *, operation: str) -> dict[str, A
             upstream={"operation": operation},
         )
     return payload
+
+
+_SHOPEE_ITEM_PATTERNS = (
+    re.compile(r"/(?:[^/?#]+-)?i\.(?P<shop_id>\d+)\.(?P<item_id>\d+)(?:[/?#]|$)", re.IGNORECASE),
+    re.compile(r"/product/(?P<shop_id>\d+)/(?P<item_id>\d+)(?:[/?#]|$)", re.IGNORECASE),
+)
+
+
+def parse_shopee_product_url_ids(url: str) -> tuple[int, int]:
+    for pattern in _SHOPEE_ITEM_PATTERNS:
+        match = pattern.search(url)
+        if match:
+            return int(match.group("shop_id")), int(match.group("item_id"))
+    raise ApiException(
+        status_code=400,
+        code="invalid_product_url",
+        message="Could not extract shopId and itemId from Shopee product URL",
+        details={"url": url},
+    )
 
 
 async def search_product_offers(payload: ProductOffersSearchRequest) -> tuple[ProductOfferSearchData, bool]:
@@ -75,3 +97,43 @@ async def search_shop_offers(payload: ShopOffersSearchRequest) -> tuple[ShopOffe
     cache.set("shop_offers", cache_key, connection)
     return ShopOfferSearchData.model_validate(connection), False
 
+
+async def get_product_post_data_from_url(payload: ProductFromUrlRequest) -> tuple[ProductFromUrlData, bool]:
+    shop_id, item_id = parse_shopee_product_url_ids(str(payload.url))
+    search_payload = ProductOffersSearchRequest(itemId=item_id, page=1, limit=1)
+    data, cached = await search_product_offers(search_payload)
+
+    if not data.nodes:
+        raise ApiException(
+            status_code=404,
+            code="product_not_found",
+            message="Product was not found in Shopee productOfferV2 results",
+            details={"shopId": shop_id, "itemId": item_id},
+        )
+
+    node = data.nodes[0]
+    if node.itemId != item_id:
+        raise ApiException(
+            status_code=502,
+            code="unexpected_product_mismatch",
+            message="Shopee returned a different product than requested",
+            details={"expectedItemId": item_id, "returnedItemId": node.itemId},
+        )
+
+    # If shopId is present in response, keep it authoritative; otherwise fall back to parsed URL.
+    resolved_shop_id = node.shopId if node.shopId is not None else shop_id
+    return (
+        ProductFromUrlData(
+            shopId=resolved_shop_id,
+            itemId=item_id,
+            productName=node.productName,
+            imageUrl=node.imageUrl,
+            priceMin=node.priceMin,
+            priceMax=node.priceMax,
+            offerLink=node.offerLink,
+            productLink=node.productLink,
+            shopName=node.shopName,
+            commissionRate=node.commissionRate,
+        ),
+        cached,
+    )

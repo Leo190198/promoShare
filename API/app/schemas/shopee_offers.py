@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import AnyHttpUrl, BaseModel, Field, field_validator, model_validator
 
 
 class PageInfo(BaseModel):
@@ -37,6 +37,23 @@ class ProductOfferV2Node(BaseModel):
 class ProductOfferSearchData(BaseModel):
     nodes: list[ProductOfferV2Node]
     pageInfo: PageInfo
+
+
+class ProductFromUrlRequest(BaseModel):
+    url: AnyHttpUrl
+
+
+class ProductFromUrlData(BaseModel):
+    shopId: int
+    itemId: int
+    productName: str | None = None
+    imageUrl: str | None = None
+    priceMin: str | None = None
+    priceMax: str | None = None
+    offerLink: str | None = None
+    productLink: str | None = None
+    shopName: str | None = None
+    commissionRate: str | None = None
 
 
 class ShopOfferV2Node(BaseModel):
@@ -133,4 +150,3 @@ class ShopOffersSearchRequest(BaseModel):
         if invalid:
             raise ValueError("shopType items must be one of 1, 2, 4")
         return value
-

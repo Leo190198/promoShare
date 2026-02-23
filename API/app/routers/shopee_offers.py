@@ -5,12 +5,18 @@ from fastapi import APIRouter, Depends
 from app.core.security import get_current_user
 from app.schemas.common import SuccessEnvelope, success_response
 from app.schemas.shopee_offers import (
+    ProductFromUrlData,
+    ProductFromUrlRequest,
     ProductOfferSearchData,
     ProductOffersSearchRequest,
     ShopOfferSearchData,
     ShopOffersSearchRequest,
 )
-from app.services.shopee_offer_service import search_product_offers, search_shop_offers
+from app.services.shopee_offer_service import (
+    get_product_post_data_from_url,
+    search_product_offers,
+    search_shop_offers,
+)
 
 router = APIRouter(prefix="/shopee/offers", tags=["shopee-offers"])
 
@@ -22,6 +28,15 @@ async def product_offers_search(
 ) -> dict:
     data, cached = await search_product_offers(payload)
     return success_response(data, meta={"operation": "productOfferV2", "cached": cached})
+
+
+@router.post("/products/from-url", response_model=SuccessEnvelope[ProductFromUrlData])
+async def product_offers_from_url(
+    payload: ProductFromUrlRequest,
+    _: dict = Depends(get_current_user),
+) -> dict:
+    data, cached = await get_product_post_data_from_url(payload)
+    return success_response(data, meta={"operation": "productFromUrl", "cached": cached})
 
 
 @router.post("/shops/search", response_model=SuccessEnvelope[ShopOfferSearchData])

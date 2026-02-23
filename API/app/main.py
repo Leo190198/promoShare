@@ -7,7 +7,7 @@ from app.core.config import get_settings
 from app.core.exceptions import register_exception_handlers
 from app.core.logging import setup_logging
 from app.core.middleware import RequestContextMiddleware
-from app.routers import auth, health, shopee_offers, shopee_short_links
+from app.routers import auth, health, shopee_offers, shopee_products, shopee_short_links
 
 
 def create_app() -> FastAPI:
@@ -37,10 +37,10 @@ def create_app() -> FastAPI:
     app.include_router(health.router, prefix="/api/v1")
     app.include_router(auth.router, prefix="/api/v1")
     app.include_router(shopee_short_links.router, prefix="/api/v1")
+    app.include_router(shopee_products.router, prefix="/api/v1")
     app.include_router(shopee_offers.router, prefix="/api/v1")
 
     return app
 
 
 app = create_app()
-
