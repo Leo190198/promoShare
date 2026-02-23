@@ -1,0 +1,38 @@
+services:
+  - type: web
+    name: promoshare-api
+    runtime: docker
+    rootDir: API
+    dockerfilePath: ./Dockerfile
+    plan: free
+    autoDeploy: true
+    healthCheckPath: /api/v1/health
+    envVars:
+      - key: PORT
+        value: "10000"
+      - key: APP_HOST
+        value: "0.0.0.0"
+      - key: ENABLE_DOCS
+        value: "true"
+      - key: LOG_LEVEL
+        value: "INFO"
+      - key: CACHE_ENABLED
+        value: "true"
+      - key: CACHE_PRODUCT_OFFERS_TTL_SECONDS
+        value: "90"
+      - key: CACHE_SHOP_OFFERS_TTL_SECONDS
+        value: "90"
+      - key: CACHE_MAXSIZE
+        value: "256"
+      - key: CORS_ENABLED
+        value: "false"
+      - key: JWT_SECRET
+        sync: false
+      - key: ADMIN_USERNAME
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: SHOPEE_APP_ID
+        sync: false
+      - key: SHOPEE_APP_SECRET
+        sync: false
