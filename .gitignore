@@ -12,6 +12,7 @@ venv/
 *.env
 API/.env
 WA_API/.env
+AUTOMATION_API/.env
 
 # OS / editors
 .DS_Store
@@ -22,3 +23,4 @@ node_modules/
 WA_API/node_modules/
 WA_API/.wwebjs_auth/
 WA_API/.wwebjs_cache/
+WA_API/qr-render-*.png

@@ -7,6 +7,7 @@ const { createHealthRouter } = require("./routes/health.routes");
 const { createSessionRouter } = require("./routes/session.routes");
 const { createGroupsRouter } = require("./routes/groups.routes");
 const { createMessagesRouter } = require("./routes/messages.routes");
+const { createQrToolRouter } = require("./routes/qr_tool.routes");
 const groupService = require("./services/group.service");
 const messageService = require("./services/message.service");
 
@@ -16,6 +17,7 @@ function createApp({ config, logger, waManager }) {
   app.use(createHttpLogger(logger));
   app.use(express.json({ limit: config.requestBodyLimit }));
 
+  app.use("/tools", createQrToolRouter());
   app.use("/api/v1", createHealthRouter());
   app.use("/api/v1", createApiKeyAuthMiddleware(config));
   app.use("/api/v1/session", createSessionRouter({ waManager }));
@@ -46,4 +48,3 @@ function createApp({ config, logger, waManager }) {
 }
 
 module.exports = { createApp };
-
